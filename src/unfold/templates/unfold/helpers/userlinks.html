@@ -1,11 +1,19 @@
 {% load i18n static %}
 
+
 <div class="flex items-center ml-auto">
     <div class="flex flex-row group items-center leading-none relative">
         <div class="flex gap-4 items-center">
             {% if environment %}
                 {% include "unfold/helpers/label.html" with text=environment.0 type=environment.1 %}
             {% endif %}
+
+            {% if extra_userlinks %}
+                {{ extra_userlinks }}
+            {% endif %}
+
+            {% include "unfold/helpers/stores.html" %}
+            
 
             {% if show_languages %}
                 {% include "unfold/helpers/language_switch.html" %}
@@ -16,8 +24,11 @@
             {% endif %}
 
             {% include "unfold/helpers/account_links.html" %}
+            
+            
         </div>
     </div>
+    
 
     {% if nav_global_side %}
         {{ nav_global_side }}
