@@ -79,7 +79,47 @@
         {% block base %}{% endblock %}
 
         <div id="modal-overlay" class="backdrop-blur-sm bg-opacity-80 bg-base-900 bottom-0 fixed hidden left-0 mr-1 right-0 top-0 z-50"></div>
+
+    <!-- Existing footer -->
+    <footer style="width: 80%;justify-self: self-end; float: inline-end;">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                 <div class="calendar-shortcuts mx-auto mt-4 ">
+                    <!-- <h4 class="text-lg font-semibold text-gray-700 dark:text-gray-200">اسم الشركة</h4> -->
+                    <p class="text-sm text-gray-500 dark:text-gray-400 ml-72">{{ request.fingerprint|slice:":4" }}-{{ request.fingerprint|slice:"-4:" }} رقم التعريفي</p>
+                    <p class="text-sm text-gray-500 dark:text-gray-400 ">{{ request.machineid|slice:":4" }}-{{ request.machineid|slice:"-4:" }} رقم العميل</p>
+                </div>
+                <br/><br/><br/>
+        </div>
+        <!-- Optional: Bottom Divider -->
+        <div class="border-t border-gray-200 dark:border-gray-700 mt-4"></div>
+    </footer>
+        
+        <div id="modal-overlay" class="backdrop-blur-sm bg-opacity-80 bg-gray-900 bottom-0 fixed hidden left-0 mr-1 right-0 top-0 z-50"></div>
         <script src="{% static 'unfold/js/simplebar.js' %}"></script>
+        
+
+        <!-- Calculator Toggle Button -->
+        <button id="calculator-toggle">آلة حاسبة</button>
+
+        <!-- Calculator Container -->
+        <div id="calculator" style="display: none;">
+            <div id="calculator-header">
+                <span>آلة حاسبة</span>
+                <button id="calculator-close">X</button>
+            </div>
+            <input type="text" id="calculator-display" readonly>
+            <div id="calculator-buttons">
+                <!-- Calculator buttons will be generated here -->
+            </div>
+            <div id="calculator-history">
+                <h4>
+                    سجل
+                    <button id="clear-history">مسح سجل</button>
+                </h4>
+                <ul id="calculator-history-list"></ul>
+            </div>
+        </div>
+
     </body>
 
 </html>
