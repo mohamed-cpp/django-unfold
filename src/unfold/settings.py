@@ -1,10 +1,12 @@
-from typing import Any, Dict
+from typing import Any
 
 from django.conf import settings
 
 CONFIG_DEFAULTS = {
     "SITE_TITLE": None,
     "SITE_HEADER": None,
+    "SITE_SUBHEADER": None,
+    "SITE_DROPDOWN": None,
     "SITE_URL": "/",
     "SITE_ICON": None,
     "SITE_SYMBOL": None,
@@ -52,6 +54,7 @@ CONFIG_DEFAULTS = {
     },
     "DASHBOARD_CALLBACK": None,
     "ENVIRONMENT": None,
+    "ENVIRONMENT_TITLE_PREFIX": None,
     "STYLES": [],
     "SCRIPTS": [],
     "SIDEBAR": {
@@ -72,7 +75,7 @@ def get_config(settings_name=None):
     if settings_name is None:
         settings_name = "UNFOLD"
 
-    def merge_dicts(dict1: Dict[str, Any], dict2: Dict[str, Any]) -> Dict[str, Any]:
+    def merge_dicts(dict1: dict[str, Any], dict2: dict[str, Any]) -> dict[str, Any]:
         result = dict1.copy()
 
         for key, value in dict2.items():

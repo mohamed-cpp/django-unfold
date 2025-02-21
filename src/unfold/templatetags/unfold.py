@@ -1,8 +1,10 @@
-from typing import Any, Dict, List, Mapping, Optional, Set, Union
+from collections.abc import Mapping
+from typing import Any, Optional, Union
 
 from django import template
 from django.contrib.admin.helpers import AdminForm, Fieldset
 from django.contrib.admin.views.main import ChangeList
+from django.db.models.options import Options
 from django.forms import Field
 from django.http import HttpRequest
 from django.template import Context, Library, Node, RequestContext, TemplateSyntaxError
@@ -11,13 +13,50 @@ from django.template.loader import render_to_string
 from django.utils.safestring import SafeText
 
 from unfold.components import ComponentRegistry
+from unfold.dataclasses import UnfoldAction
+from unfold.enums import ActionVariant
 
 register = Library()
 
 
-@register.simple_tag(name="tab_list", takes_context=True)
-def tab_list(context, page, opts) -> str:
+def _get_tabs_list(
+    context: RequestContext, page: str, opts: Optional[Options] = None
+) -> list:
     tabs_list = []
+    page_id = None
+
+    if page not in ["changeform", "changelist"]:
+        page_id = page
+
+    for tab in context.get("tab_list", []):
+        if page_id:
+            if tab.get("page") == page_id:
+                tabs_list = tab["items"]
+                break
+
+            continue
+
+        if "models" not in tab:
+            continue
+
+        for tab_model in tab["models"]:
+            if isinstance(tab_model, str):
+                if str(opts) == tab_model and page == "changelist":
+                    tabs_list = tab["items"]
+                    break
+            elif isinstance(tab_model, dict) and str(opts) == tab_model["name"]:
+                is_detail = tab_model.get("detail", False)
+
+                if (page == "changeform" and is_detail) or (
+                    page == "changelist" and not is_detail
+                ):
+                    tabs_list = tab["items"]
+                    break
+    return tabs_list
+
+
+@register.simple_tag(name="tab_list", takes_context=True)
+def tab_list(context: RequestContext, page: str, opts: Optional[Options] = None) -> str:
     inlines_list = []
 
     data = {
@@ -26,22 +65,18 @@ def tab_list(context, page, opts) -> str:
         "actions_list": context.get("actions_list"),
         "actions_items": context.get("actions_items"),
         "is_popup": context.get("is_popup"),
+        "tabs_list": _get_tabs_list(context, page, opts),
     }
 
-    for tab in context.get("tab_list", []):
-        if str(opts) in tab["models"]:
-            tabs_list = tab["items"]
-            break
+    # If the changeform is rendered and there are no custom tab navigation
+    # specified, check for inlines to put into tabs
+    if page == "changeform" and len(data["tabs_list"]) == 0:
+        for inline in context.get("inline_admin_formsets", []):
+            if opts and hasattr(inline.opts, "tab"):
+                inlines_list.append(inline)
 
-    if page == "changelist":
-        data["tabs_list"] = tabs_list
-
-    for inline in context.get("inline_admin_formsets", []):
-        if hasattr(inline.opts, "tab"):
-            inlines_list.append(inline)
-
-    if page == "changeform" and len(inlines_list) > 0:
-        data["inlines_list"] = inlines_list
+        if len(inlines_list) > 0:
+            data["inlines_list"] = inlines_list
 
     return render_to_string(
         "unfold/helpers/tab_list.html",
@@ -70,7 +105,7 @@ def index(indexable: Mapping[int, Any], i: int) -> Any:
 
 
 @register.filter
-def tabs(adminform: AdminForm) -> List[Fieldset]:
+def tabs(adminform: AdminForm) -> list[Fieldset]:
     result = []
 
     for fieldset in adminform:
@@ -86,7 +121,7 @@ class CaptureNode(Node):
         self.varname = varname
         self.silent = silent
 
-    def render(self, context: Dict[str, Any]) -> Union[str, SafeText]:
+    def render(self, context: dict[str, Any]) -> Union[str, SafeText]:
         output = self.nodelist.render(context)
         context[self.varname] = output
         if self.silent:
@@ -155,7 +190,7 @@ class RenderComponentNode(template.Node):
         self,
         template_name: str,
         nodelist: NodeList,
-        extra_context: Optional[Dict] = None,
+        extra_context: Optional[dict] = None,
         include_context: bool = False,
         *args,
         **kwargs,
@@ -252,7 +287,7 @@ def add_css_class(field: Field, classes: Union[list, tuple]) -> Field:
     takes_context=True,
     name="preserve_filters",
 )
-def preserve_changelist_filters(context: Context) -> Dict[str, Dict[str, str]]:
+def preserve_changelist_filters(context: Context) -> dict[str, dict[str, str]]:
     """
     Generate hidden input fields to preserve filters for POST forms.
     """
@@ -262,10 +297,10 @@ def preserve_changelist_filters(context: Context) -> Dict[str, Dict[str, str]]:
     if not request or not changelist:
         return {"params": {}}
 
-    used_params: Set[str] = {
+    used_params: set[str] = {
         param for spec in changelist.filter_specs for param in spec.used_parameters
     }
-    preserved_params: Dict[str, str] = {
+    preserved_params: dict[str, str] = {
         param: value for param, value in request.GET.items() if param not in used_params
     }
 
@@ -316,7 +351,11 @@ def fieldset_row_classes(context: Context) -> str:
             classes.append("hidden")
 
     # Compressed fields special styling
-    if adminform and adminform.model_admin.compressed_fields:
+    if (
+        adminform
+        and hasattr(adminform.model_admin, "compressed_fields")
+        and adminform.model_admin.compressed_fields
+    ):
         classes.extend(
             [
                 "lg:border-b",
@@ -360,7 +399,11 @@ def fieldset_line_classes(context: Context) -> str:
     if hasattr(field, "errors") and field.errors():
         classes.append("errors")
 
-    if adminform.model_admin.compressed_fields:
+    if (
+        adminform
+        and hasattr(adminform.model_admin, "compressed_fields")
+        and adminform.model_admin.compressed_fields
+    ):
         classes.extend(
             [
                 "border-b",
@@ -371,6 +414,74 @@ def fieldset_line_classes(context: Context) -> str:
                 "lg:flex-row",
                 "dark:border-base-800",
                 "first:lg:border-l-0",
+            ]
+        )
+
+    return " ".join(set(classes))
+
+
+@register.simple_tag(takes_context=True)
+def action_item_classes(context: Context, action: UnfoldAction) -> str:
+    classes = [
+        "border",
+        "-ml-px",
+        "max-md:first:rounded-t",
+        "max-md:last:rounded-b",
+        "md:first:rounded-l",
+        "md:last:rounded-r",
+    ]
+
+    if "variant" not in action:
+        variant = ActionVariant.DEFAULT
+    else:
+        variant = action["variant"]
+
+    if variant == ActionVariant.PRIMARY:
+        classes.extend(
+            [
+                "border-primary-600",
+                "bg-primary-600",
+                "text-white",
+            ]
+        )
+    elif variant == ActionVariant.DANGER:
+        classes.extend(
+            [
+                "border-red-600",
+                "bg-red-600",
+                "text-white",
+            ]
+        )
+    elif variant == ActionVariant.SUCCESS:
+        classes.extend(
+            [
+                "border-green-600",
+                "bg-green-600",
+                "text-white",
+            ]
+        )
+    elif variant == ActionVariant.INFO:
+        classes.extend(
+            [
+                "border-blue-600",
+                "bg-blue-600",
+                "text-white",
+            ]
+        )
+    elif variant == ActionVariant.WARNING:
+        classes.extend(
+            [
+                "border-orange-600",
+                "bg-orange-600",
+                "text-white",
+            ]
+        )
+    else:
+        classes.extend(
+            [
+                "border-base-200",
+                "hover:text-primary-600",
+                "dark:border-base-700",
             ]
         )
 
